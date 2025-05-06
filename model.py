@@ -71,3 +71,54 @@ class FeedForwardModel(lightning.LightningModule):
     def confgure_optimizers(self):
         optimizer = self.optimizer(self.parameters(), lr=self.learning_rate)
         return optimizer
+
+class TwoLayerModel(lightning.LightningModule):
+    def __init__(self, cfg, rrf=True):
+        super(TwoLayerModel, self).__init__()
+
+        self.fc1 = nn.Linear(cfg.input_dim, cfg.hidden_dim)
+        nn.init.normal_(self.fc1.weight, mean=0.0, std=0.01)
+
+        self.fc2 = nn.Linear(cfg.hidden_dim, cfg.output_dim)
+        self.activation = nn.ReLU()
+        self.loss_fn = nn.CrossEntropyLoss()
+        self.optimizer = torch.optim.SGD
+        self.learning_rate = cfg.learning_rate
+
+        if rrf:
+            self.freeze_fc1()
+        self.save_hyperparameters()
+
+    def forward(self, x):
+        x = self.fc1(x)
+        x = self.activation(x)
+        x = self.fc2(x)
+        return x
+        
+    def training_step(self, batch, batch_idx):
+        x, y = batch
+        y_hat = self(x)
+        loss = self.loss_fn(y_hat, y)
+        self.log('train_loss', loss)
+        return loss
+    
+    def validation_step(self, batch, batch_idx):
+        x, y = batch
+        y_hat = self(x)
+        loss = self.loss_fn(y_hat, y)
+        self.log('val_loss', loss)
+        return loss
+    
+    def configure_optimizers(self):
+        optimizer = self.optimizer(self.parameters(), lr=self.learning_rate)
+        return optimizer
+    
+    def freeze_fc1(self):
+        for param in self.fc1.parameters():
+            param.requires_grad = False
+        self.fc1.weight.requires_grad = False
+        self.fc1.bias.requires_grad = False
+        self.fc1.weight.grad = None
+        self.fc1.bias.grad = None
+
+    
